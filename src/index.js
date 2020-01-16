@@ -1,21 +1,98 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import templates_data from './game_templates.json'
+import { Button, Table, Form, Row } from 'react-bootstrap';
 import './index.css';
-import { Button, Table} from 'react-bootstrap';
+// import { CharacterAssignmentForm } from './Steps'
 
-// var headers = [
-//   "号码", "姓名", "角色", "技能", "死亡情况", "警徽"
-// ];
+class CharacterAssignmentDropdown extends React.Component {
+  constructor(props) {
+    super(props);
+    this.handleChange = this.handleChange.bind(this);
+  }
 
+  handleChange(event) {
+    this.props.action(event);
+  }
+
+  render() {
+    return (
+      <select onChange={this.handleChange}>
+        <option value="0">-</option>
+        {
+          this.props.candidates.map(c => {
+            return <option value={c}>{c}</option>;
+          })
+        }
+      </select>
+    )
+  }
+}
+
+
+
+class CharacterAssignmentForm extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+          "candidates": this.props.candidates,
+          "confirmed": false,
+          "selected": []
+        }
+    
+        this.handleChange = this.handleChange.bind(this);
+        this.handleSubmit = this.handleSubmit.bind(this);
+    }
+
+
+    handleChange(event) {
+        var selected = this.state.selected;
+        selected.push(event.target.value);
+        this.setState({"selected": selected});
+        var candidates = this.state.candidates.filter(x => !this.state.selected.includes(x));
+        
+        this.setState({"candidates": candidates})
+    }
+
+    handleSubmit() {
+      this.setState({"confirmed": true});
+      this.props.action(this.state.selected);
+    }
+    
+    render() {
+      var roles = Array.from(Array(this.props.number).keys());
+      return (
+        <div>
+            <Form>
+            <Row>
+              <Form.Group controlId="ControlSelect1">
+                <Form.Label>{this.props.display_name}</Form.Label>
+                {
+                  roles.map(c => {
+                    return <CharacterAssignmentDropdown 
+                      candidates={this.state.candidates}
+                      action={this.handleChange}
+                    />
+                  })
+                    
+                }
+              </Form.Group>
+            </Row>
+            <Button onClick={this.handleSubmit} variant="primary">确认</Button>
+            </Form>
+        </div>
+      )
+    }
+}
 
 class Infobox extends React.Component {
   render() {
     return (
-      <div> <p>该游戏包含以下角色：</p>
+      <div> <p>该游戏包含以下角色：
         {this.props.value.map(pair => {
           return (<strong> {pair[1]}名{pair[0]} </strong>)
         })}
+      </p>
       </div>
     )
   }
@@ -27,7 +104,8 @@ class GameSelectBox extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      "value": "default0"
+      "value": "default0",
+      "selected": false
     }
 
     this.handleChange = this.handleChange.bind(this);
@@ -40,32 +118,47 @@ class GameSelectBox extends React.Component {
   }
 
   handleSubmit() {
+    this.setState({"selected": true});
     this.props.action(this.state.value);
   }
 
   render() {
     const selectedValue = this.state.value;
-    var characters = this.props.data.find(function(e) {
+    const selectedData = this.props.data.find(function(e) {
       return e.name === selectedValue;
-    }).characters.map(c => {
+    })
+    const displayName = selectedData.display_name
+    var characters = selectedData.characters.map(c => {
       return [c.display_name, c.number];
     });
 
     return (
       <form>
-        <label>
-          选择游戏模板：
-          <br></br>
-          <select value={this.state.value} onChange={this.handleChange}>
-            {
-              this.props.data.map(element => {
-                return <option value={element.name}>{element.display_name}</option>;
-              })
-            }
-          </select>
-          <Button onClick={this.handleSubmit} variant="primary">确认</Button>
-        </label>
-        <br />
+          {
+            this.state.selected && (
+              <h4>已经选择 {displayName} 作为游戏设置</h4>
+            )
+          }
+          {
+            !this.state.selected && (
+              <div>
+                <label>
+                  选择游戏模板：
+                </label><br></br>
+                <select value={this.state.value} onChange={this.handleChange}>
+                  {
+                    this.props.data.map(element => {
+                      return <option value={element.name}>{element.display_name}</option>;
+                    })
+                  }
+                </select>
+                <Button onClick={this.handleSubmit} variant="primary">确认</Button>
+              </div>
+
+            )
+
+          }
+        
         <Infobox value={characters}/>
         
       </form>
@@ -120,7 +213,7 @@ class Board extends React.Component {
             <th>角色</th>
             <th>阵营</th>
             <th>技能</th>
-            <th>存活情况</th>
+            <th>事件</th>
             <th>警徽</th>
           </tr>
         </thead>
@@ -137,11 +230,74 @@ class Board extends React.Component {
   }
 }
 
+
+// class GameStep extends React.Component {
+
+// }
+
+
+class DayNightStage extends React.Component {
+  render() {
+    var dayNightMsg = ""
+    if (this.props.number === 0) {
+      dayNightMsg = "准备阶段"
+    } else if (this.props.stage === "day") {
+      dayNightMsg = "第" + this.props.number + "天"
+    } else {
+      dayNightMsg = "第" + this.props.number + "夜"
+    }
+
+    return (
+      <h3>{dayNightMsg}</h3>
+    )
+  }
+}
+
+
+class GameStagePanel extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      "stage": 'day',
+      "number": 0,
+      "current_step": "prepare"
+    };
+
+    this.handleSubmit = this.handleSubmit.bind(this);
+    this.handleAssignment = this.handleAssignment.bind(this);
+
+  }
+
+  handleSubmit() {
+    this.props.action();
+  }
+
+  handleAssignment(value) {
+    console.log(value)
+  }
+
+  render() {
+    return (
+      <div className=".sidebar-item">
+        <div className="sidebar-sticky">
+          <DayNightStage stage={this.state.stage} number={this.state.number} />
+          <CharacterAssignmentForm display_name="狼人" number={2} candidates={[1,2,3,4]} action={this.handleAssignment} />
+          <Button onClick={this.handleSubmit} variant="primary">下一步</Button>
+        </div>
+      </div>
+
+    )
+  }
+}
+
 class Game extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      "nplayers":  12
+      "nplayers":  12,
+      "shift": 'day',
+      "number": 0,
+      "current_step": "prepare"
     };
 
     this.handleGameSelect = this.handleGameSelect.bind(this);
@@ -153,6 +309,10 @@ class Game extends React.Component {
     })
     this.setState({template: data});
     this.setState({nplayers: data.total_players})
+
+  }
+
+  handleNextStep() {
 
   }
 
@@ -168,7 +328,8 @@ class Game extends React.Component {
         <div className="game-board">
           <Board nplayers={this.state.nplayers} />
         </div>
-        <div className="game-info">
+        <div className="game-process">
+          <GameStagePanel />
         </div>
       </div>
     );

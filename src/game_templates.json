@@ -130,7 +130,10 @@
                 "display_name": "普通村民",
                 "camp": "villager",
                 "group": "villager",
-                "number": 3
+                "number": 3,
+                "action_round": -1,
+                "action_priority": -1,
+                "ability": {}
             }
         ]
     },
@@ -248,7 +251,10 @@
                 "display_name": "普通村民",
                 "camp": "villager",
                 "group": "villager",
-                "number": 4
+                "number": 4,
+                "action_round": -1,
+                "action_priority": -1,
+                "ability": {}
             }
         ]
     }
