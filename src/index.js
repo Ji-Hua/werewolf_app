@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import templates_data from './game_templates.json'
-import { Button, Table, Form, Row } from 'react-bootstrap';
+import { Button, Table, Form, Row, Col } from 'react-bootstrap';
 import './index.css';
 // import { CharacterAssignmentForm } from './Steps'
 
@@ -12,7 +12,7 @@ class CharacterAssignmentDropdown extends React.Component {
   }
 
   handleChange(event) {
-    this.props.action(event);
+    this.props.action(this.props.role, event, this.props.id);
   }
 
   render() {
@@ -31,59 +31,6 @@ class CharacterAssignmentDropdown extends React.Component {
 
 
 
-class CharacterAssignmentForm extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-          "candidates": this.props.candidates,
-          "confirmed": false,
-          "selected": []
-        }
-    
-        this.handleChange = this.handleChange.bind(this);
-        this.handleSubmit = this.handleSubmit.bind(this);
-    }
-
-
-    handleChange(event) {
-        var selected = this.state.selected;
-        selected.push(event.target.value);
-        this.setState({"selected": selected});
-        var candidates = this.state.candidates.filter(x => !this.state.selected.includes(x));
-        
-        this.setState({"candidates": candidates})
-    }
-
-    handleSubmit() {
-      this.setState({"confirmed": true});
-      this.props.action(this.state.selected);
-    }
-    
-    render() {
-      var roles = Array.from(Array(this.props.number).keys());
-      return (
-        <div>
-            <Form>
-            <Row>
-              <Form.Group controlId="ControlSelect1">
-                <Form.Label>{this.props.display_name}</Form.Label>
-                {
-                  roles.map(c => {
-                    return <CharacterAssignmentDropdown 
-                      candidates={this.state.candidates}
-                      action={this.handleChange}
-                    />
-                  })
-                    
-                }
-              </Form.Group>
-            </Row>
-            <Button onClick={this.handleSubmit} variant="primary">确认</Button>
-            </Form>
-        </div>
-      )
-    }
-}
 
 class Infobox extends React.Component {
   render() {
@@ -203,7 +150,6 @@ class Board extends React.Component {
   render() {
     const nPlayer = this.props.nplayers;
     var playerIds = Array.from(Array(nPlayer).keys()).map(k => {return k + 1});
-    console.log(playerIds)
     return (
       <Table striped bordered hover responsive="md">
         <thead>
@@ -220,8 +166,8 @@ class Board extends React.Component {
         <tbody>
           {
             playerIds.map(pid => {
-              return <PlayerRow playerId={pid}/>;
-            })   
+              return <PlayerRow playerId={pid} />;
+            })
           }
           
         </tbody>
@@ -272,8 +218,8 @@ class GameStagePanel extends React.Component {
     this.props.action();
   }
 
-  handleAssignment(value) {
-    console.log(value)
+  handleAssignment(values) {
+    this.props.rolehandler(values);
   }
 
   render() {
@@ -281,11 +227,73 @@ class GameStagePanel extends React.Component {
       <div className=".sidebar-item">
         <div className="sidebar-sticky">
           <DayNightStage stage={this.state.stage} number={this.state.number} />
-          <CharacterAssignmentForm display_name="狼人" number={2} candidates={[1,2,3,4]} action={this.handleAssignment} />
           <Button onClick={this.handleSubmit} variant="primary">下一步</Button>
         </div>
       </div>
 
+    )
+  }
+}
+
+
+class CharacterAssignmentForm extends React.Component {
+  constructor(props) {
+      super(props);
+      this.state = {
+        "confirmed": false,
+        
+      }
+  
+      this.handleChange = this.handleChange.bind(this);
+      this.handleSubmit = this.handleSubmit.bind(this);
+  }
+
+
+  handleChange(role, event, id) {
+    this.props.action(role, event.target.value, id);
+  }
+
+  handleSubmit() {
+
+    if (!this.state.confirmed) {
+      this.props.confirm();
+    }
+    this.setState({"confirmed": true});
+  }
+  
+  render() {
+    return (
+      <div>
+        <h3>角色分配</h3>
+          <Form>
+            <Form.Row>
+              {
+                this.props.roles.map(role => {
+                  if (role.name !== "villager") {
+                    return (
+                      <div><Form.Label>{role.display_name}</Form.Label>
+                      {
+                        Array.from(
+                          Array(role.number).keys())
+                          .map((i) => {
+                            return <CharacterAssignmentDropdown 
+                              candidates={this.props.candidates}
+                              action={this.handleChange}
+                              role={role.name}
+                              id={i}
+                            />
+                        })
+                      }
+                      <Button onClick={this.handleSubmit} variant="primary">确认</Button>
+                      </div>
+                      )
+                  }
+                })
+              }
+            
+          </Form.Row>
+        </Form>
+      </div>
     )
   }
 }
@@ -297,10 +305,21 @@ class Game extends React.Component {
       "nplayers":  12,
       "shift": 'day',
       "number": 0,
-      "current_step": "prepare"
+      "currentStep": "prepare",
+      "roles": {},
+      "rolePlayers": {},
+      "unassignedPlayers": [],
+      "playerStatus": []
     };
 
-    this.handleGameSelect = this.handleGameSelect.bind(this);
+    this.handleGameSelect = this.handleGameSelect.bind(this);                                     
+    this.handleRoleAssignment = this.handleRoleAssignment.bind(this);
+    this.handleRoleAssignmentConfirm = this.handleRoleAssignmentConfirm.bind(this);
+    this.updatePlayerRoles = this.updatePlayerRoles.bind(this);
+  }
+
+  updatePlayerRoles() {
+    console.log(this.state.rolePlayers)
   }
 
   handleGameSelect(value) {
@@ -308,7 +327,44 @@ class Game extends React.Component {
       return e.name === value
     })
     this.setState({template: data});
-    this.setState({nplayers: data.total_players})
+    this.setState({nplayers: data.total_players});
+    this.setState({unassignedPlayers: Array.from(
+      Array(data.total_players).keys())
+      .map(k => {return k + 1})})
+    var roles = {};
+    var rolePlayers = this.state.rolePlayers;                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+    data.characters.forEach(character => {
+      roles[character.name] = character.display_name
+      if (character.name !== "villager") {
+        rolePlayers[character.name] = Array(character.number);
+      }
+      
+    });
+    this.setState({"roles": roles});
+    this.setState({"rolePlayers": rolePlayers});
+  }
+
+  handleRoleAssignment(role, playerId, id) {
+    var rolePlayers = this.state.rolePlayers;
+    rolePlayers[role][id] = parseInt(playerId);
+    this.setState({rolePlayers: rolePlayers});
+  }
+
+  handleRoleAssignmentConfirm() {
+    var uniqueValues = new Set(Object.values(this.state.rolePlayers).flat());
+    var validNumber = this.state.nplayers - parseInt(this.state.template.characters.find((c) => {
+      return c.name === "villager"
+    }).number)
+    if (uniqueValues.size === validNumber && !("-" in uniqueValues) ) {
+      var villagerIds = this.state.unassignedPlayers.filter(id => {
+        return !(Array.from(uniqueValues).includes(id))});
+      var rolePlayers = this.state.rolePlayers;
+      rolePlayers['villagers'] = villagerIds
+      this.setState({"rolePlayers": rolePlayers});
+      this.updatePlayerRoles();
+    } else {
+      alert("输入玩家号码有误，请重新选择")
+    }
 
   }
 
@@ -318,18 +374,29 @@ class Game extends React.Component {
 
   render() {
     var templatesData = this.props.templates;
+    let characterAssignmentForm;
+    if (this.state.template) {
+      characterAssignmentForm = <CharacterAssignmentForm 
+        roles={this.state.template.characters}
+        action={this.handleRoleAssignment}
+        confirm={this.handleRoleAssignmentConfirm}
+        candidates={this.state.unassignedPlayers} />;
+    } else {
+      characterAssignmentForm = <Row></Row>;
+    }
     return (
       <div className="game">
         <h1>狼人杀裁判小助手</h1>
         <br></br>
         <div className="game-select-box">
           <GameSelectBox data={templatesData} action={this.handleGameSelect} />
+          {characterAssignmentForm}
         </div>
         <div className="game-board">
-          <Board nplayers={this.state.nplayers} />
+          <Board nplayers={this.state.nplayers} status={this.state.playerStatus}/>
         </div>
         <div className="game-process">
-          <GameStagePanel />
+          <GameStagePanel rolehandler={this.handleRoleAssignment}/>
         </div>
       </div>
     );
